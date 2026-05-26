@@ -33,28 +33,32 @@ module vga_controller (
     end
 
     // =========================================================
-    // BUTTON DEBOUNCING & EDGE DETECT
+    // BUTTON DEBOUNCING & EDGE DETECT (Updated for Down)
     // =========================================================
     reg [19:0] db_counter = 0; wire db_tick = (db_counter == 625_000); 
     reg left_state=0, right_state=0, rot_state=0, down_state=0;
-    reg left_prev=0, right_prev=0, rot_prev=0;
+    
+    // Tracking the previous state of ALL buttons now
+    reg left_prev=0, right_prev=0, rot_prev=0, down_prev=0; 
     
     always @(posedge clk_25MHz) begin
         if (db_tick) begin
             left_state <= btn_left; 
             right_state <= btn_right; 
             rot_state <= btn_rotate;
-            down_state <= btn_down; // Capture if Down is being held
+            down_state <= btn_down; 
             db_counter <= 0;
         end else db_counter <= db_counter + 1;
         
-        left_prev <= left_state; right_prev <= right_state; rot_prev <= rot_state;
+        // Save the previous state to detect edges
+        left_prev <= left_state; right_prev <= right_state; rot_prev <= rot_state; down_prev <= down_state;
     end
     
+    // Creating perfect 1-clock-cycle pulses for all buttons
     wire left_pulse = left_state & ~left_prev;
     wire right_pulse = right_state & ~right_prev;
     wire rot_pulse = rot_state & ~rot_prev;
-    // We don't need a down_pulse! We want the continuous 'down_state' to drop it fast while held.
+    wire down_pulse = down_state & ~down_prev; 
 
     // =========================================================
     // RANDOMIZER & MEMORY BOARD
@@ -171,13 +175,16 @@ module vga_controller (
     wire collision_down = hit_floor || check_1 || check_2 || check_3 || check_4;
 
     // =========================================================
-    // GAME LOOP FSM (With Hardware Fast Drop Multiplexer)
+    // GAME LOOP FSM (With Hardware Hard Drop Flag)
     // =========================================================
     reg [24:0] grav_counter = 0; 
     reg [24:0] fall_speed = 10_000_000; 
     
-    // FAST DROP LOGIC: If Down button is held, set speed to 250,000 cycles
-    wire [24:0] current_speed = (down_state) ? 250_000 : fall_speed;
+    // THE FLAG: Tracks if a Hard Drop was triggered
+    reg hard_drop_active = 0;
+    
+    // If the flag is high, speed is 0 (falling every clock cycle instantly)
+    wire [24:0] current_speed = (hard_drop_active) ? 25'd0 : fall_speed;
     wire tick = (grav_counter >= current_speed); 
     
     localparam FALL = 0, LOCK = 1, SCAN = 2, SHIFT = 3, SPAWN = 4, GAME_OVER = 5;
@@ -199,12 +206,16 @@ module vga_controller (
             grav_counter <= 0;
             state <= GAME_OVER;
             scan_y <= 19;
+            hard_drop_active <= 0; // Reset flag
         end else begin
             
             if (state == FALL) begin
                 if (rot_pulse && !rot_invalid) rot <= rot + 1;
                 if (left_pulse && !hit_left_wall) block_x <= block_x - 1;
                 if (right_pulse && !hit_right_wall) block_x <= block_x + 1;
+                
+                // TRIGGER FLAG: When pulse hits, turn on Hard Drop
+                if (down_pulse) hard_drop_active <= 1; 
                 
                 if (tick) begin
                     if (!collision_down) begin
@@ -261,6 +272,10 @@ module vga_controller (
                 block_y <= 0; block_x <= 4; rot <= 0;
                 shape_type <= random_shape; 
                 block_color <= random_color;
+                
+                // RESET FLAG: Safe to spawn, clear the Hard Drop!
+                hard_drop_active <= 0; 
+                
                 state <= FALL;
             end
             
