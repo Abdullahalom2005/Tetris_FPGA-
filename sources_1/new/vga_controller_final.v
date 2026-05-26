@@ -1,74 +1,37 @@
 `timescale 1ns / 1ps
 
 module vga_controller (
-    input wire clk_25MHz,   
-    input wire rst,  
-    input wire btn_left,     
-    input wire btn_right,    
-    input wire btn_rotate,   
-    input wire btn_down,        
-    output reg hsync,       
-    output reg vsync,       
-    output reg [2:0] rgb    
+    input wire clk_25MHz,
+    input wire rst,
+    input wire btn_left,
+    input wire btn_right,
+    input wire btn_rotate,
+    input wire btn_down,
+    input wire [9:0] h_count, // Incoming from vga_sync
+    input wire [9:0] v_count, // Incoming from vga_sync
+    input wire video_on,      // Incoming from vga_sync
+    output reg [2:0] rgb      // Outgoing to monitor
 );
 
     // =========================================================
-    // VGA TIMING & COUNTERS 
+    // 1. INSTANTIATE DEBOUNCERS
     // =========================================================
-    localparam H_ACTIVE = 640, H_FRONT = 16, H_SYNC = 96, H_BACK = 48, H_TOTAL = 800;
-    localparam V_ACTIVE = 480, V_FRONT = 10, V_SYNC = 2,  V_BACK = 33, V_TOTAL = 525;
-
-    reg [9:0] h_count = 0; reg [9:0] v_count = 0;
-
-    always @(posedge clk_25MHz) begin
-        if (h_count == H_TOTAL - 1) begin
-            h_count <= 0; 
-            if (v_count == V_TOTAL - 1) v_count <= 0; else v_count <= v_count + 1; 
-        end else h_count <= h_count + 1; 
-    end
-
-    always @(posedge clk_25MHz) begin
-        hsync <= ~((h_count >= H_ACTIVE + H_FRONT) && (h_count < H_ACTIVE + H_FRONT + H_SYNC));
-        vsync <= ~((v_count >= V_ACTIVE + V_FRONT) && (v_count < V_ACTIVE + V_FRONT + V_SYNC));
-    end
+    wire left_pulse, right_pulse, rot_pulse, down_pulse;
+    debouncer d1 (.clk_25MHz(clk_25MHz), .btn_in(btn_left),   .btn_pulse(left_pulse));
+    debouncer d2 (.clk_25MHz(clk_25MHz), .btn_in(btn_right),  .btn_pulse(right_pulse));
+    debouncer d3 (.clk_25MHz(clk_25MHz), .btn_in(btn_rotate), .btn_pulse(rot_pulse));
+    debouncer d4 (.clk_25MHz(clk_25MHz), .btn_in(btn_down),   .btn_pulse(down_pulse));
 
     // =========================================================
-    // BUTTON DEBOUNCING & EDGE DETECT (Updated for Down)
+    // 2. INSTANTIATE LFSR
     // =========================================================
-    reg [19:0] db_counter = 0; wire db_tick = (db_counter == 625_000); 
-    reg left_state=0, right_state=0, rot_state=0, down_state=0;
-    
-    // Tracking the previous state of ALL buttons now
-    reg left_prev=0, right_prev=0, rot_prev=0, down_prev=0; 
-    
-    always @(posedge clk_25MHz) begin
-        if (db_tick) begin
-            left_state <= btn_left; 
-            right_state <= btn_right; 
-            rot_state <= btn_rotate;
-            down_state <= btn_down; 
-            db_counter <= 0;
-        end else db_counter <= db_counter + 1;
-        
-        // Save the previous state to detect edges
-        left_prev <= left_state; right_prev <= right_state; rot_prev <= rot_state; down_prev <= down_state;
-    end
-    
-    // Creating perfect 1-clock-cycle pulses for all buttons
-    wire left_pulse = left_state & ~left_prev;
-    wire right_pulse = right_state & ~right_prev;
-    wire rot_pulse = rot_state & ~rot_prev;
-    wire down_pulse = down_state & ~down_prev; 
+    wire [1:0] random_shape;
+    wire [2:0] random_color;
+    lfsr_randomizer rng (.clk_25MHz(clk_25MHz), .random_shape(random_shape), .random_color(random_color));
 
     // =========================================================
-    // RANDOMIZER & MEMORY BOARD
+    // 3. MEMORY BOARD
     // =========================================================
-    reg [7:0] lfsr = 8'hAF; 
-    wire [1:0] random_shape = lfsr[1:0];     
-    wire [2:0] random_color = (lfsr[4:2] % 6) + 1; 
-    
-    always @(posedge clk_25MHz) lfsr <= {lfsr[6:0], lfsr[7] ^ lfsr[5] ^ lfsr[4] ^ lfsr[3]};
-
     reg [2:0] board [0:19][0:9];
     integer i, j;
     initial begin
@@ -78,7 +41,7 @@ module vga_controller (
     end
 
     // =========================================================
-    // CURRENT SHAPE GENERATOR MATH
+    // 4. CURRENT SHAPE GENERATOR MATH
     // =========================================================
     reg signed [5:0] block_x = 4, block_y = 0; 
     reg [1:0] rot = 0;
@@ -117,7 +80,7 @@ module vga_controller (
     end
 
     // =========================================================
-    // LOOK-AHEAD COLLISION DETECTION 
+    // 5. LOOK-AHEAD COLLISION DETECTION 
     // =========================================================
     wire [1:0] next_rot = rot + 1;
     reg signed [5:0] n2_x, n2_y, n3_x, n3_y, n4_x, n4_y;
@@ -175,15 +138,12 @@ module vga_controller (
     wire collision_down = hit_floor || check_1 || check_2 || check_3 || check_4;
 
     // =========================================================
-    // GAME LOOP FSM (With Hardware Hard Drop Flag)
+    // 6. GAME LOOP FSM 
     // =========================================================
     reg [24:0] grav_counter = 0; 
     reg [24:0] fall_speed = 10_000_000; 
     
-    // THE FLAG: Tracks if a Hard Drop was triggered
     reg hard_drop_active = 0;
-    
-    // If the flag is high, speed is 0 (falling every clock cycle instantly)
     wire [24:0] current_speed = (hard_drop_active) ? 25'd0 : fall_speed;
     wire tick = (grav_counter >= current_speed); 
     
@@ -206,15 +166,13 @@ module vga_controller (
             grav_counter <= 0;
             state <= GAME_OVER;
             scan_y <= 19;
-            hard_drop_active <= 0; // Reset flag
+            hard_drop_active <= 0;
         end else begin
             
             if (state == FALL) begin
                 if (rot_pulse && !rot_invalid) rot <= rot + 1;
                 if (left_pulse && !hit_left_wall) block_x <= block_x - 1;
                 if (right_pulse && !hit_right_wall) block_x <= block_x + 1;
-                
-                // TRIGGER FLAG: When pulse hits, turn on Hard Drop
                 if (down_pulse) hard_drop_active <= 1; 
                 
                 if (tick) begin
@@ -272,10 +230,7 @@ module vga_controller (
                 block_y <= 0; block_x <= 4; rot <= 0;
                 shape_type <= random_shape; 
                 block_color <= random_color;
-                
-                // RESET FLAG: Safe to spawn, clear the Hard Drop!
                 hard_drop_active <= 0; 
-                
                 state <= FALL;
             end
             
@@ -300,7 +255,7 @@ module vga_controller (
     end
 
     // =========================================================
-    // RENDER PIPELINE
+    // 7. RENDER PIPELINE
     // =========================================================
     localparam GRID_OFFSET_X = 220; localparam GRID_OFFSET_Y = 40;  
     wire in_grid = (h_count >= GRID_OFFSET_X && h_count < GRID_OFFSET_X + 200) && (v_count >= GRID_OFFSET_Y && v_count < GRID_OFFSET_Y + 400);
@@ -318,7 +273,7 @@ module vga_controller (
                      (v_count >= 440 && v_count < 442) && (h_count >= 218 && h_count < 422);
 
     always @(posedge clk_25MHz) begin
-        if (h_count < H_ACTIVE && v_count < V_ACTIVE) begin
+        if (video_on) begin // Protects the physical monitor blanking phase
             if (in_grid && is_active_block)         rgb <= block_color;
             else if (in_grid && board[grid_y][grid_x] != 3'b000) rgb <= board[grid_y][grid_x]; 
             else if (is_border) begin

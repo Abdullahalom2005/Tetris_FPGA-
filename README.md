@@ -37,7 +37,7 @@ The project strictly follows a modular hardware design pattern, separating the t
 | **BTND** | Soft Drop | Accelerates the downward gravity of the active piece. |
 | **CPU_RESET** | Restart | Wipes the BRAM to zeroes and resets the FSM to the initial state. |
 
-![Tetris Game Running on Nexys A7](assets/tetris_gameplay.jpg)
+![Tetris Game Running on Nexys A7](assets/tetris_gameplay.jpeg)
 ---
 **Author:** Abdullah Alom  
 *B.Tech in Electrical and Electronics Engineering, IIT Guwahati*
