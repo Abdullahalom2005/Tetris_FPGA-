@@ -23,9 +23,12 @@ This project demonstrates the transition from sequential software logic to paral
 
 The project strictly follows a modular hardware design pattern, separating the top-level wiring from the core game logic.
 
-* `tetris.v` **(Top Module):** Acts as the "Motherboard." Handles physical pin assignments, instantiates the game logic, and utilizes a logic counter to divide the board's native 100 MHz clock down to the 25 MHz pixel clock required by the VGA standard.
-* `vga_controller.v` **(Game Core):** Acts as the "Graphics Card." Contains the BRAM array, physics engine, PRNG, collision radar, and the VGA signal timing logic.
-* `constraints.xdc`: Maps the Verilog variables to the physical copper pins on the Nexys A7 board (VGA outputs, clock, buttons).
+* `top.v` **(Top Module):** The "Motherboard." Handles physical pin assignments, manages the 100MHz to 25MHz clock division, and routes signals between the sub-modules.
+* `vga_controller.v` **(Game Datapath):** The core physics and rendering engine. Contains the BRAM array, the Game Loop FSM, the look-ahead collision radar, and the priority color multiplexer.
+* `vga_sync.v` **(Timing Driver):** A standalone VGA timing generator. Handles standard VESA 640x480 resolution synchronization and electron-beam tracking.
+* `debouncer.v` **(Input Filter):** Reusable 40Hz sampling timer to filter mechanical button bounce into clean, 1-clock-cycle logical pulses.
+* `lfsr_randomizer.v` **(Hardware PRNG):** An 8-bit Linear Feedback Shift Register utilizing XOR gate taps to continuously generate pseudo-random piece shapes and colors.
+* `constraints.xdc`: Maps the Verilog variables to the physical copper pins on the Nexys A7 board.
 
 ##  Game Controls
 
