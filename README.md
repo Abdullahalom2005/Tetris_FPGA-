@@ -1,10 +1,10 @@
-# 🕹️ Tetris Arcade Game on FPGA
+#  Tetris Arcade Game on FPGA
 
 **A complete, hardware-level implementation of the classic Tetris arcade game written in Verilog HDL and deployed on the Xilinx Nexys A7-100T FPGA.**
 
 This project demonstrates the transition from sequential software logic to parallel hardware design, featuring custom 60Hz VGA rendering, Block RAM (BRAM) memory management, and combinational look-ahead collision detection.
 
-## ✨ Key Technical Features
+##  Key Technical Features
 
 * **Hardware VGA Controller:** Custom-built 60Hz render pipeline translating physical electron-beam coordinates (`h_count`, `v_count`) into a 10x20 active game grid using integer division and priority multiplexing.
 * **Block RAM (BRAM) Integration:** Architected a 2D memory array mapped to the FPGA's physical silicon to persistently track locked blocks and game states.
@@ -13,13 +13,13 @@ This project demonstrates the transition from sequential software logic to paral
 * **Robust Input Debouncing:** Implemented digital sampling counters to filter mechanical switch bounce, coupled with edge-detection registers for precise, single-cycle block movement and hard drops.
 * **Finite State Machine (FSM):** Asynchronous state management handling gravity timers, synchronous line-clearing array shifts, and game-over conditions.
 
-## 🛠️ Hardware Requirements
+##  Hardware Requirements
 
 * **Board:** Xilinx Nexys A7-100T (or equivalent Artix-7 FPGA)
 * **Display:** Standard VGA Monitor (640x480 resolution @ 60Hz)
 * **Input:** On-board mechanical push buttons
 
-## 🗂️ Project Architecture
+##  Project Architecture
 
 The project strictly follows a modular hardware design pattern, separating the top-level wiring from the core game logic.
 
@@ -27,7 +27,7 @@ The project strictly follows a modular hardware design pattern, separating the t
 * `vga_controller.v` **(Game Core):** Acts as the "Graphics Card." Contains the BRAM array, physics engine, PRNG, collision radar, and the VGA signal timing logic.
 * `constraints.xdc`: Maps the Verilog variables to the physical copper pins on the Nexys A7 board (VGA outputs, clock, buttons).
 
-## 🎮 Game Controls
+##  Game Controls
 
 | Button | Action | Description |
 | :--- | :--- | :--- |
@@ -37,6 +37,7 @@ The project strictly follows a modular hardware design pattern, separating the t
 | **BTND** | Soft Drop | Accelerates the downward gravity of the active piece. |
 | **CPU_RESET** | Restart | Wipes the BRAM to zeroes and resets the FSM to the initial state. |
 
+![Tetris Game Running on Nexys A7](assets/tetris_gameplay.jpg)
 ---
 **Author:** Abdullah Alom  
 *B.Tech in Electrical and Electronics Engineering, IIT Guwahati*
